@@ -1,0 +1,13 @@
+{
+  "mode": "audit",
+  "ai_host": "127.0.0.1",
+  "ai_port": 18080,
+  "poll_seconds": 2,
+  "whitelisted_dirs": ["bots/sanctioned"],
+  "registry": {
+    "bots/sanctioned/sanctioned_bot.py": {
+      "owner": "platform-team",
+      "intent": "draft marketing copy"
+    }
+  }
+}
