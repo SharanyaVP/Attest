@@ -30,6 +30,7 @@ from botocore.exceptions import ClientError
 OBJECT_CAP = 200
 TIMELINE_CAP = 25
 MAX_RESULTS = 50
+ATTRIBUTION_DAYS = 7
 
 # VPC flow log default format, positional fields.
 FLOW_FIELDS = [
@@ -238,18 +239,123 @@ def cloudtrail_timeline(cloudtrail, role_name, instance_id, start, end):
     return entries
 
 
+
+def describe_identity(user_identity):
+    """Turn a CloudTrail userIdentity dict into a short human string."""
+    if not user_identity:
+        return "unknown"
+    id_type = user_identity.get("type", "")
+    if id_type == "IAMUser":
+        return "IAM user " + user_identity.get("userName", "unknown")
+    if id_type == "AssumedRole":
+        arn = user_identity.get("arn", "")
+        parts = arn.split("/")
+        role = parts[1] if len(parts) > 2 else arn
+        session = parts[2] if len(parts) > 2 else ""
+        label = "assumed role " + role
+        if session:
+            label = label + " (session " + session + ")"
+        return label
+    if id_type == "Root":
+        return "root account"
+    if id_type == "FederatedUser":
+        return "federated user " + user_identity.get("userName", "")
+    return user_identity.get("arn", "") or id_type or "unknown"
+
+
+def lookup_who(cloudtrail, resource_name, event_name, start, end):
+    """Find who performed event_name on resource_name via CloudTrail.
+
+    Returns (who_string, event_time_iso) or (None, None).
+    """
+    try:
+        resp = cloudtrail.lookup_events(
+            LookupAttributes=[
+                {"AttributeKey": "EventName", "AttributeValue": event_name},
+                {"AttributeKey": "ResourceName", "AttributeValue": resource_name},
+            ],
+            StartTime=start,
+            EndTime=end,
+            MaxResults=MAX_RESULTS,
+        )
+    except ClientError:
+        return None, None
+    for event in resp.get("Events", []):
+        if event.get("EventName") != event_name:
+            continue
+        raw = event.get("CloudTrailEvent", "") or ""
+        try:
+            parsed = json.loads(raw)
+        except ValueError:
+            continue
+        who = describe_identity(parsed.get("userIdentity") or {})
+        return who, iso(event["EventTime"])
+    return None, None
+
+
+def attribute_owner(cloudtrail, cloudtrail_global, instance_id, role_name,
+                    start, end):
+    """Attribute a shadow workload to a human owner via CloudTrail.
+
+    Follows the chain: who launched the instance, who created its IAM role.
+    IAM is a global service, so role events are read from us-east-1.
+    The chain can honestly stop at a shared role, a team, or automation;
+    that outcome is reported, not hidden.
+    """
+    launched_by, launched_at = lookup_who(
+        cloudtrail, instance_id, "RunInstances", start, end)
+    role_by, role_at = None, None
+    if role_name and role_name != "unknown":
+        # IAM control-plane events land in us-east-1, not the local region.
+        role_by, role_at = lookup_who(
+            cloudtrail_global, role_name, "CreateRole", start, end)
+
+    attribution = {
+        "instance_launched_by": launched_by,
+        "instance_launched_at": launched_at,
+        "role_created_by": role_by,
+        "role_created_at": role_at,
+    }
+
+    notes = []
+    if launched_by:
+        when = " at " + launched_at if launched_at else ""
+        notes.append("instance launched by " + launched_by + when)
+    else:
+        notes.append("no RunInstances event in window; launcher unknown "
+                     "(launch may predate the window)")
+    if role_name and role_name != "unknown":
+        if role_by:
+            when = " at " + role_at if role_at else ""
+            notes.append("IAM role " + role_name + " created by " + role_by + when)
+        else:
+            notes.append("no CreateRole event for " + role_name + " in window; "
+                         "role creator unknown")
+    low = " ".join(notes).lower()
+    if "assumed role" in low or "federated" in low:
+        notes.append("chain stops at a shared role or automation; "
+                     "no single human identified")
+    attribution["notes"] = notes
+    return attribution
+
+
 def fmt_ts(dt):
     return dt.strftime("%H:%M:%SZ")
 
 
 def build_finding(eni_id, flows, instance_id, instance_name, registry_item,
-                  role_name, timeline, stub_ip, stub_port):
+                  role_name, timeline, stub_ip, stub_port, attribution=None):
     count = len(flows)
     first = min(f["_start"] for f in flows)
     last = max(f["_end"] for f in flows)
     registered = registry_item is not None
     status = "registered" if registered else "shadow-candidate"
     owner = registry_item.get("owner", "") if registered else "unknown"
+    owner_attribution = attribution or {}
+    if not registered and attribution:
+        launched_by = attribution.get("instance_launched_by")
+        if launched_by:
+            owner = launched_by
 
     evidence = [
         "%d ACCEPTed flows to %s:%s between %s and %s"
@@ -262,6 +368,8 @@ def build_finding(eni_id, flows, instance_id, instance_name, registry_item,
         )
     else:
         evidence.append("no registry binding for %s" % instance_id)
+    for note in owner_attribution.get("notes", []):
+        evidence.append("owner attribution: %s" % note)
 
     if registered or count >= 1:
         confidence = "high"
@@ -277,6 +385,7 @@ def build_finding(eni_id, flows, instance_id, instance_name, registry_item,
         "confidence": confidence,
         "evidence": evidence,
         "iam_role": role_name,
+        "owner_attribution": owner_attribution,
         "downstream_actions": timeline,
     }
 
@@ -300,6 +409,7 @@ def main():
     dynamodb = session.client("dynamodb")
     iam = session.client("iam")
     cloudtrail = session.client("cloudtrail")
+    cloudtrail_global = session.client("cloudtrail", region_name="us-east-1")
 
     flow_prefix = config.get("flow_log_prefix", "")
     prefix = "%sAWSLogs/%s/vpcflowlogs/%s/" % (flow_prefix, account_id, region)
@@ -325,9 +435,18 @@ def main():
         role_name = resolve_iam_role(ec2, iam, instance_id, registry_item)
         timeline = cloudtrail_timeline(cloudtrail, role_name, instance_id,
                                        window_start, window_end)
+        attribution = None
+        if registry_item is None:
+            # Attribution is historical: the launch/role events long predate
+            # the detection window, so it gets its own lookback.
+            attribution_start = window_end - timedelta(days=ATTRIBUTION_DAYS)
+            attribution = attribute_owner(cloudtrail, cloudtrail_global,
+                                          instance_id, role_name,
+                                          attribution_start, window_end)
         findings.append(
             build_finding(eni_id, flows, instance_id, instance_name,
-                          registry_item, role_name, timeline, stub_ip, stub_port)
+                          registry_item, role_name, timeline, stub_ip, stub_port,
+                          attribution)
         )
 
     payload = {"generated_at": iso(window_end), "findings": findings}
