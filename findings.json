@@ -1,0 +1,50 @@
+{
+  "generated_at": "2026-09-29T04:41:29Z",
+  "findings": [
+    {
+      "instance_id": "i-0f3a2bad7f7e91d4f",
+      "instance_name": "shadowdemo-ai-stub",
+      "ai_destination": "10.0.1.172:8080",
+      "status": "registered",
+      "owner": "platform-team",
+      "confidence": "high",
+      "evidence": [
+        "2 ACCEPTed flows to 10.0.1.172:8080 between 23:25:30Z and 23:26:26Z",
+        "ENI eni-01000049857224da1 attached to i-0f3a2bad7f7e91d4f (Name=shadowdemo-ai-stub)",
+        "registry binding found: owner=platform-team"
+      ],
+      "iam_role": "shadowdemo-stub-role",
+      "downstream_actions": []
+    },
+    {
+      "instance_id": "i-09fa84e88ccdafbda",
+      "instance_name": "shadowdemo-agent-b",
+      "ai_destination": "10.0.1.172:8080",
+      "status": "shadow-candidate",
+      "owner": "unknown",
+      "confidence": "high",
+      "evidence": [
+        "1 ACCEPTed flows to 10.0.1.172:8080 between 23:25:30Z and 23:25:59Z",
+        "ENI eni-0393f9aaa5f777958 attached to i-09fa84e88ccdafbda (Name=shadowdemo-agent-b)",
+        "no registry binding for i-09fa84e88ccdafbda"
+      ],
+      "iam_role": "shadowdemo-agent-b-role",
+      "downstream_actions": []
+    },
+    {
+      "instance_id": "i-0b51daf3d9ea38a84",
+      "instance_name": "shadowdemo-agent-a",
+      "ai_destination": "10.0.1.172:8080",
+      "status": "registered",
+      "owner": "platform-team",
+      "confidence": "high",
+      "evidence": [
+        "1 ACCEPTed flows to 10.0.1.172:8080 between 23:26:06Z and 23:26:32Z",
+        "ENI eni-0b2187255a94b4728 attached to i-0b51daf3d9ea38a84 (Name=shadowdemo-agent-a)",
+        "registry binding found: owner=platform-team"
+      ],
+      "iam_role": "shadowdemo-agent-a-role",
+      "downstream_actions": []
+    }
+  ]
+}

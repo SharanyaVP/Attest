@@ -1,0 +1,41 @@
+{
+  "region": "us-west-2",
+  "account_id": "895316612374",
+  "vpc_id": "vpc-04480cdc52506be01",
+  "subnet_ids": [
+    "subnet-04439c4ccd28813b2",
+    "subnet-08812487110ffe1d6"
+  ],
+  "sg_id": "sg-09814cb85ec274b82",
+  "route_table_id": "rtb-03c1bd8c85bdab7f2",
+  "igw_id": "igw-0992db0306e2e0e9f",
+  "instances": {
+    "agent-a": "i-0b51daf3d9ea38a84",
+    "agent-b": "i-09fa84e88ccdafbda",
+    "ai-stub": "i-0f3a2bad7f7e91d4f"
+  },
+  "private_ips": {
+    "agent-a": "10.0.1.234",
+    "agent-b": "10.0.2.140",
+    "ai-stub": "10.0.1.172"
+  },
+  "registry_table": "shadowdemo-registry",
+  "demo_bucket": "shadowdemo-demo-895316612374",
+  "logs_bucket": "shadowdemo-logs-895316612374",
+  "secret_name": "shadowdemo/canary-db-password",
+  "secret_arn": "arn:aws:secretsmanager:us-west-2:895316612374:secret:shadowdemo/canary-db-password-LzAuKw",
+  "trail_name": "shadowdemo-trail",
+  "flow_log_id": "fl-0141b74a330e3a5c3",
+  "flow_log_prefix": "flow-logs/",
+  "roles": {
+    "agent-a": "shadowdemo-agent-a-role",
+    "agent-b": "shadowdemo-agent-b-role",
+    "ai-stub": "shadowdemo-stub-role"
+  },
+  "instance_profiles": {
+    "agent-a": "shadowdemo-agent-a-role-profile",
+    "agent-b": "shadowdemo-agent-b-role-profile",
+    "ai-stub": "shadowdemo-stub-role-profile"
+  },
+  "stub_port": 8080
+}
