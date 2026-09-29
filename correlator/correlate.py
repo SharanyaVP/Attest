@@ -27,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 import boto3
 from botocore.exceptions import ClientError
 
-OBJECT_CAP = 200
+OBJECT_CAP = 2000
 TIMELINE_CAP = 25
 MAX_RESULTS = 50
 ATTRIBUTION_DAYS = 7
@@ -82,6 +82,11 @@ def iter_flow_records(s3, bucket, prefix, stub_ip, stub_port, window_start):
     """Yield dicts for ACCEPTed flow records aimed at the AI stub."""
     paginator = s3.get_paginator("list_objects_v2")
     pages = paginator.paginate(Bucket=bucket, Prefix=prefix)
+    # S3 lists oldest-first; with OBJECT_CAP that keeps only stale files.
+    # Read newest-first so recent windows are actually covered.
+    _objs = [o for _pg in pages for o in _pg.get("Contents", [])]
+    _objs.sort(key=lambda o: o.get("Key", ""), reverse=True)
+    pages = [{"Contents": _objs}]
     seen = 0
     for page in pages:
         for obj in page.get("Contents", []):
