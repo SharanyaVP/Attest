@@ -1,6 +1,19 @@
-# Shadow Agent Detection: Hackathon Prototype on AWS
+# Attest: Identity and observability for every AI agent
 
 ## Overview
+
+Attest finds AI agents nobody registered and gives each one an identity, an
+owner, and a kill switch. Two sensors feed one registry:
+
+1. **Zero-touch sensor** (`sensor/`): watches workloads calling AI endpoints
+   with no SDK, no registration, no headers. Audit mode reports; enforce mode
+   terminates. Laptop MVP included; production design uses eBPF, cgroup
+   membership, and immutable image digests.
+2. **Cloud-log correlator** (`correlator/`): where the sensor cannot reach,
+   VPC Flow Logs and CloudTrail are correlated against the registry to flag
+   shadow workloads, attribute owners via the CloudTrail launch chain, read
+   the live IAM permission envelope, and quarantine.
+
 
 This prototype proves you can catch an AI agent nobody registered. A shadow
 EC2 workload calls a controlled AI endpoint and touches AWS resources; network
