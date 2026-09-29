@@ -1,4 +1,4 @@
-"""Shadow Agent Detection dashboard.
+"""Attest: Shadow Agent Detection dashboard.
 
 Reads ../findings.json (relative to this file) unless FINDINGS_PATH is set.
 Run with: streamlit run dashboard/app.py
@@ -21,7 +21,7 @@ def load_findings():
     return data.get("generated_at"), data.get("findings", [])
 
 
-st.title("Shadow Agent Detection")
+st.title("Attest: Shadow Agent Detection")
 generated_at, findings = load_findings()
 
 if findings is None:
